@@ -1,129 +1,141 @@
 # code-refactor workflow
-# Multi-model refactoring analysis → GitHub issues on target repo
-# Refactor ≠ rewrite: tests must pass before and after
+# FlowForge enforced — no step can be skipped
 
 name: code-refactor
-description: 3 models analyze code, produce refactoring proposals as GitHub issues
+description: Multi-model refactoring analysis — 3 analysts propose, target repo gets issues
 version: "1.0"
 start: parse_request
 
 nodes:
   parse_request:
     task: |
-      Parse the refactor request. Extract:
-      - owner: repo owner
-      - repo: repo name
-      - scope: file path, directory, module name, or "full" for whole repo
-      - direction: optional refactoring direction (e.g., "make architecture more like Discord", "extract shared components", "reduce coupling")
+      Parse the refactoring request. Extract:
+      - **repo**: owner/repo (required)
+      - **scope**: path, module, or "entire repo" (default: entire repo)
+      - **direction**: optional architectural/design direction
 
-      User may provide a GitHub link, natural language, or structured format.
-      If direction is not specified, analysts will identify opportunities independently.
+      User may provide natural language, e.g.:
+      - "refactor kagura-agent/cove src/server/"
+      - "refactor openclaw/openclaw --direction 'simplify plugin system'"
+      - "analyze kagura-agent/wiki for refactoring, make it more modular"
 
-      Clone or pull the target repo to /tmp/code-refactor/<repo>/ for analysis.
-      Run existing tests to establish baseline: record test command + pass/fail count.
-      This baseline is critical — refactoring must not break tests.
-    next: load_prompt
+      Output: repo, scope, direction (or "none")
+    next: load_context
 
-  load_prompt:
+  load_context:
     task: |
-      Load refactor analysis standard from `~/.openclaw/workspace/code-refactor/prompts/`:
-      1. Check `prompts/<repo>.prompt.md` (project-specific)
-      2. Fallback to `prompts/default.prompt.md`
-      Read the file content — this is what analysts will use.
+      Understand the target codebase before spawning analysts.
 
-      Also gather project context:
-      - Directory structure (tree, depth 3)
-      - Package.json / Cargo.toml / go.mod / pyproject.toml — dependencies & scripts
-      - Test framework and test count
-      - Existing linter/formatter config
-      - README summary
+      1. Clone: `gh repo clone <repo> /tmp/refactor-<repo-name>` (if not already cloned)
+      2. Quick scan: README, package.json/go.mod/pyproject.toml, directory structure
+      3. Test framework: what test runner, how to run tests, test coverage
+      4. Code conventions: naming, module structure, error handling patterns
+      5. Check `prompts/<repo-name>.prompt.md` for project-specific analysis standards
+         - Fallback to `prompts/default.prompt.md`
+
+      Output a brief context summary (≤20 lines) that analysts will receive.
+      This context helps analysts understand conventions without re-reading everything.
+
+      Proxy: `export https_proxy=http://127.0.0.1:1083`
     next: spawn_analysts
 
   spawn_analysts:
     task: |
       Spawn 3 independent analyst subagents in parallel (sessions_spawn, mode: "run", runTimeoutSeconds: 0):
 
-      - 🏗️ Arch (default-llm-sg/gpt-5.5) — Architecture perspective: module boundaries, dependency direction, separation of concerns, layering
-      - 🔬 Lens (default-llm-sg/claude-opus-4.7) — Code quality perspective: readability, patterns, duplication, naming, abstraction levels
-      - ⚡ Flux (default-llm-sg/gemini-3.1-pro-preview) — Efficiency perspective: dead code, unnecessary complexity, simpler alternatives, performance
+      - 🏗️ Arch: model `default-llm-sg/gpt-5.5`
+      - 🔬 Lens: model `default-llm-sg/claude-opus-4.7`
+      - ⚡ Flux: model `default-llm-sg/gemini-3.1-pro-preview`
 
-      Each analyst gets:
-      - The refactor prompt/standard
-      - Project context (structure, deps, test baseline)
-      - The scope to analyze
-      - The direction (if specified)
-      - `export https_proxy=http://127.0.0.1:1083`
+      Each analyst receives:
+      - The refactor prompt (from prompts/)
+      - Repo + scope + direction
+      - Context summary from load_context
+      - Instruction to clone the repo themselves and analyze independently
 
-      Each must output:
-      - 3-7 concrete refactoring proposals
-      - Each proposal: title, rationale, scope of change, risk level (low/medium/high), estimated complexity
-      - Each proposal must explain WHY (not just "this is messy")
-      - Each proposal must confirm: "existing tests should still pass because..."
+      Each analyst must `export https_proxy=http://127.0.0.1:1083` first.
+      Analysts must NOT create issues — text output only.
 
-      Analysts must NOT open issues or modify code — text output only.
       Use sessions_yield to wait for all 3 to complete.
     next: consolidate
 
   consolidate:
     task: |
-      Merge the 3 analysts' proposals:
+      Merge the 3 analyst reports into a unified refactoring plan:
 
-      1. Deduplicate: group proposals that target the same code/concern
-      2. Consensus: if 2+ analysts independently identified the same issue → high confidence
-      3. Rank by: confidence (consensus > solo) × impact × inverse-risk
-      4. For each final proposal, synthesize the best reasoning from all analysts who mentioned it
-      5. Add implementation hints (but keep it at proposal level, not PR-ready code)
-      6. Tag each with source analysts (e.g., "identified by Arch + Lens")
+      1. **Consensus items**: 2+ analysts identified the same opportunity → high confidence
+      2. **Unique items**: only 1 analyst found it → include if well-justified, flag as single-source
+      3. **Conflicts**: analysts disagree on approach → note both perspectives, pick the better-justified one
+      4. **Dedup**: merge overlapping proposals into one, credit contributing analysts
+      5. **Risk sort**: order by risk (lowest first) — we want safe wins first
+      6. **Test impact**: flag any proposal that could break existing tests
 
-      Filter out:
-      - Proposals that are actually rewrites (changing behavior, not structure)
-      - Proposals that would require new tests to validate (that's a feature, not a refactor)
-      - Trivial formatting-only suggestions (leave those to linters)
-
-      Output: ordered list of proposals ready to become issues.
+      Output: numbered list of consolidated proposals, each with all fields from the prompt format.
     next: create_issues
 
   create_issues:
     task: |
-      For each approved proposal, create a GitHub issue on the TARGET repo (owner/repo):
+      Create GitHub issues on the **target repo** for each consolidated proposal.
 
-      Title: `[refactor] <concise title>`
-      Labels: `refactor` (create label if it doesn't exist)
-      Body template:
+      For each proposal:
+      ```bash
+      gh issue create --repo <owner>/<repo> \
+        --title "refactor: <short title>" \
+        --body "<formatted body>" \
+        --label "refactoring"
+      ```
+
+      Issue body format:
       ```
       ## Refactoring Proposal
 
-      **Direction:** <direction if specified, or "general improvement">
-      **Scope:** <files/modules affected>
-      **Risk:** <low/medium/high>
-      **Confidence:** <consensus/single-analyst>
-      **Identified by:** <analyst names>
+      **What**: ...
+      **Where**: ...
+      **Why**: ...
 
-      ## Current State
-      <what the code looks like now and why it's suboptimal>
+      ### Proposed Approach
+      ...
 
-      ## Proposed Change
-      <what the refactoring would do — structural change, not implementation detail>
+      ### Risk Assessment
+      ...
 
-      ## Why This Is Safe
-      <why existing tests should continue to pass>
+      ### Test Impact
+      ...
 
-      ## Implementation Hints
-      <optional guidance for the implementing agent>
+      **Effort**: S/M/L | **Priority**: P0/P1/P2
+      **Confidence**: High (consensus) / Medium (single-source)
 
       ---
-      *Generated by [code-refactor](https://github.com/kagura-agent/code-refactor) — multi-model analysis*
+      _Generated by [Kagura Code Refactor](https://github.com/kagura-agent) — 3-model analysis_
+      _Analysts: 🏗️ Arch (GPT-5.5) · 🔬 Lens (Claude Opus 4.7) · ⚡ Flux (Gemini 3.1 Pro)_
       ```
 
-      Report: how many issues created, links to each.
+      If the "refactoring" label doesn't exist, create it first:
+      `gh label create refactoring --repo <owner>/<repo> --description "Refactoring proposals" --color "1d76db"`
+
+      Post a channel summary with links to all created issues.
+
+      Proxy: `export https_proxy=http://127.0.0.1:1083`
     next: reflection
 
   reflection:
     task: |
       Post-analysis self-improvement. DO NOT SKIP.
 
-      1. Record: Write to `runs/<repo>-<date>.md` — scope, direction, proposals generated, issues created
-      2. Prompt Evolution: Did the analysts miss obvious things? Were proposals too vague? Update prompts/
-      3. Analyst Assessment: Which analyst found the most actionable proposals? Update stats
-      4. Commit and push with message `reflect: <repo> <date>`
+      Layer 1 — Record: Write to `runs/<repo>-<date>.md`:
+        - What was analyzed, what scope, what direction
+        - How many proposals per analyst, how many consolidated
+        - Which proposals were consensus vs single-source
+        - Issue links created
+
+      Layer 2 — Prompt Evolution: Review analyst outputs.
+        - Did any analyst consistently miss things others caught?
+        - Were proposals too vague or too prescriptive?
+        - Update prompts/ if patterns emerge
+
+      Layer 3 — Process: Did the workflow work smoothly?
+        - Context loading sufficient?
+        - Analysts had enough info to work independently?
+
+      Commit and push changes: `evolve: <what changed>`
     terminal: true
