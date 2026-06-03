@@ -9,9 +9,11 @@ Trigger: any message implying "refactor this repo/module" + a repo reference.
 
 ## Analysts
 
-- 🏗️ Arch — `default-llm-sg/gpt-5.5` — Architecture & structure
-- 🔬 Lens — `default-llm-sg/claude-opus-4.7` — Code quality & patterns
-- ⚡ Flux — `default-llm-sg/gemini-3.1-pro-preview` — Performance & simplification
+- 🏗️ Arch — `default-llm-sg/gpt-5.5`
+- 🔬 Lens — `default-llm-sg/claude-opus-4.7`
+- ⚡ Flux — `default-llm-sg/gemini-3.1-pro-preview`
+
+All 3 receive the same prompt — no assigned focus areas. Model differences produce natural divergence; consensus = high-confidence signal.
 
 ## Execution
 

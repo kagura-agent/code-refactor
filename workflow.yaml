@@ -47,11 +47,15 @@ nodes:
       - 🔬 Lens: model `default-llm-sg/claude-opus-4.7`
       - ⚡ Flux: model `default-llm-sg/gemini-3.1-pro-preview`
 
-      Each analyst receives:
+      All 3 analysts receive the SAME prompt — no focus area differentiation.
+      Each gets:
       - The refactor prompt (from prompts/)
       - Repo + scope + direction
       - Context summary from load_context
       - Instruction to clone the repo themselves and analyze independently
+
+      Let model differences produce natural divergence. Consensus across
+      different models on the same prompt = high-confidence signal.
 
       Each analyst must `export https_proxy=http://127.0.0.1:1083` first.
       Analysts must NOT create issues — text output only.
