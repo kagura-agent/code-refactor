@@ -17,13 +17,40 @@ All 3 receive the same prompt — no assigned focus areas. Model differences pro
 
 ## Execution
 
-**Always use FlowForge. Never manually spawn analysts.**
+**必须用 FlowForge。不接受手动替代。**
 
 ```bash
-flowforge run code-refactor --input '{"repo":"<owner>/<repo>","scope":"<path>","direction":"<optional>"}'
+# 开始 workflow
+flowforge run code-refactor
+# 每步执行完后推进：
+flowforge advance --result '<step output>' -w code-refactor
+# 查看当前进度：
+flowforge status -w code-refactor
 ```
 
-The workflow handles everything: context loading, analyst spawning, consolidation, issue creation, and reflection.
+FlowForge 逐步推进，不能跳步。workflow 保证 reflection 和 tracking 不被遗漏。
+
+**手动 spawn 只在 FlowForge 完全不可用时才允许。** 如果手动执行，必须逐条对照 workflow.yaml 的每个节点，确认全部完成。
+
+## Analyst Output
+
+Analysts write to `analyses/<repo>-<date>-<name>.md` (e.g. `analyses/cove-2026-06-05-arch.md`).
+Parent reads from files, not session history. **Prevents truncation + creates persistent record.**
+
+> Learned from code-review: session history gets truncated. File output is the only reliable path.
+
+## Analysis Standards
+
+- `prompts/<repo>.prompt.md` — project-specific (check first)
+- `prompts/default.prompt.md` — fallback
+
+## Re-analysis Protocol
+
+For follow-up analyses of the same repo:
+1. Include previous run's consolidated findings
+2. Check each previous proposal — was it implemented?
+3. **Escalation rule**: Unaddressed proposals from last round that are still relevant → escalate priority
+4. Fresh analysis of any new/changed code
 
 ## Input Formats
 
@@ -45,8 +72,17 @@ refactor owner/repo path/ --direction "decouple X from Y"
 sessions_send(sessionKey="agent:kagura:discord:channel:1511591264863125586", message="refactor kagura-agent/cove src/api/")
 ```
 
+## Issue Follow-up
+
+After creating issues, track whether they get implemented:
+- `tracking.json` — issue status tracking
+- Check on next analysis of the same repo
+
 ## Key Files
 
 - `workflow.yaml` — FlowForge workflow (source of truth)
-- `prompts/` — analysis standard prompts
-- `runs/` — run records
+- `prompts/` — analysis standard prompts (default + per-repo)
+- `analyses/` — analyst output files (persistent, git-tracked)
+- `runs/` — run records + reflection
+- `stats.md` — per-analyst capability assessment
+- `tracking.json` — issue follow-up tracking

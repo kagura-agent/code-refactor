@@ -1,0 +1,18 @@
+[
+  {
+    "owner": "kagura-agent",
+    "repo": "cove",
+    "analyzed_at": "2026-06-05T14:00+08:00",
+    "scope": "packages/server/src/db/schema.ts + repos",
+    "direction": "table design robustness, Discord-like simplicity",
+    "issues": [
+      { "number": 203, "title": "replace Snowflake auth tokens with crypto-random secrets", "priority": "P0", "confidence": "high", "status": "open" },
+      { "number": 204, "title": "add missing database indexes for hot query paths", "priority": "P0", "confidence": "high", "status": "open" },
+      { "number": 205, "title": "fix FK constraints, ON DELETE behavior, and NOT NULL enforcement", "priority": "P0", "confidence": "high", "status": "open" },
+      { "number": 206, "title": "switch message pagination from timestamp to Snowflake ID ordering", "priority": "P0", "confidence": "high", "status": "open" },
+      { "number": 207, "title": "persist OAuth identity on user record", "priority": "P1", "confidence": "medium", "status": "open" },
+      { "number": 208, "title": "add TTL cleanup for pending_registrations and invite_codes", "priority": "P2", "confidence": "high", "status": "open" },
+      { "number": 209, "title": "make invite consumption atomic and replay-safe", "priority": "P2", "confidence": "medium", "status": "open" }
+    ]
+  }
+]

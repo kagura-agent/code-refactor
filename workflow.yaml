@@ -60,6 +60,12 @@ nodes:
       Each analyst must `export https_proxy=http://127.0.0.1:1083` first.
       Analysts must NOT create issues — text output only.
 
+      **CRITICAL: Analysts must write output to files, not just session output.**
+      Each analyst writes to: `analyses/<repo-name>-<date>-<analyst>.md`
+      e.g. `analyses/cove-2026-06-05-arch.md`
+      Parent reads from files after all complete. This prevents truncation
+      of session history (learned from code-review experience).
+
       Use sessions_yield to wait for all 3 to complete.
     next: consolidate
 
